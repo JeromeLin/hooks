@@ -1,65 +1,121 @@
-/* eslint-disable no-shadow */
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import type { Key } from 'react';
+import isPlainObject from 'lodash/isPlainObject';
+import useMemoizedFn from '../useMemoizedFn';
+import { isFunction, isString } from '../utils';
 
-export default function useSelections<T>(items: T[], defaultSelected: T[] = []) {
+export interface Options<T> {
+  defaultSelected?: T[];
+  itemKey?: string | ((item: T) => Key);
+}
+
+export default function useSelections<T>(items: T[], options?: T[] | Options<T>) {
+  let defaultSelected: T[] = [];
+  let itemKey: Options<T>['itemKey'];
+
+  if (Array.isArray(options)) {
+    defaultSelected = options;
+  } else if (isPlainObject(options)) {
+    defaultSelected = options?.defaultSelected ?? defaultSelected;
+    itemKey = options?.itemKey ?? itemKey;
+  }
+
+  const getKey = (item: T): Key => {
+    if (isFunction(itemKey)) {
+      return itemKey(item);
+    }
+    if (isString(itemKey) && isPlainObject(item)) {
+      return item[itemKey];
+    }
+
+    return item as Key;
+  };
+
   const [selected, setSelected] = useState<T[]>(defaultSelected);
 
-  const selectedSet = useMemo(() => new Set<T>(selected), [selected]);
+  const selectedMap = useMemo(() => {
+    const keyToItemMap = new Map();
 
-  const singleActions = useMemo(() => {
-    const isSelected = (item: T) => selectedSet.has(item);
+    if (!Array.isArray(selected)) {
+      return keyToItemMap;
+    }
 
-    const select = (item: T) => {
-      selectedSet.add(item);
-      return setSelected(Array.from(selectedSet));
-    };
+    selected.forEach((item) => {
+      keyToItemMap.set(getKey(item), item);
+    });
 
-    const unSelect = (item: T) => {
-      selectedSet.delete(item);
-      return setSelected(Array.from(selectedSet));
-    };
+    return keyToItemMap;
+  }, [selected]);
 
-    const toggle = (item: T) => {
-      if (isSelected(item)) {
-        unSelect(item);
-      } else {
-        select(item);
-      }
-    };
+  const isSelected = (item: T) => selectedMap.has(getKey(item));
 
-    return { isSelected, select, unSelect, toggle };
-  }, [selectedSet]);
+  const select = (item: T) => {
+    selectedMap.set(getKey(item), item);
+    setSelected(Array.from(selectedMap.values()));
+  };
 
-  const allActions = useMemo(() => {
-    const selectAll = () => {
-      items.forEach((o) => {
-        selectedSet.add(o);
-      });
-      setSelected(Array.from(selectedSet));
-    };
+  const unSelect = (item: T) => {
+    selectedMap.delete(getKey(item));
+    setSelected(Array.from(selectedMap.values()));
+  };
 
-    const unSelectAll = () => {
-      items.forEach((o) => {
-        selectedSet.delete(o);
-      });
-      setSelected(Array.from(selectedSet));
-    };
+  const toggle = (item: T) => {
+    if (isSelected(item)) {
+      unSelect(item);
+    } else {
+      select(item);
+    }
+  };
 
-    const noneSelected = items.every((o) => !selectedSet.has(o));
+  const selectAll = () => {
+    items.forEach((item) => {
+      selectedMap.set(getKey(item), item);
+    });
+    setSelected(Array.from(selectedMap.values()));
+  };
 
-    const allSelected = items.every((o) => selectedSet.has(o)) && !noneSelected;
+  const unSelectAll = () => {
+    items.forEach((item) => {
+      selectedMap.delete(getKey(item));
+    });
+    setSelected(Array.from(selectedMap.values()));
+  };
 
-    const partiallySelected = !noneSelected && !allSelected;
+  const noneSelected = useMemo(
+    () => items.every((item) => !selectedMap.has(getKey(item))),
+    [items, selectedMap],
+  );
 
-    const toggleAll = () => (allSelected ? unSelectAll() : selectAll());
+  const allSelected = useMemo(
+    () => items.every((item) => selectedMap.has(getKey(item))) && !noneSelected,
+    [items, selectedMap, noneSelected],
+  );
 
-    return { selectAll, unSelectAll, noneSelected, allSelected, partiallySelected, toggleAll };
-  }, [selectedSet, items]);
+  const partiallySelected = useMemo(
+    () => !noneSelected && !allSelected,
+    [noneSelected, allSelected],
+  );
+
+  const toggleAll = () => (allSelected ? unSelectAll() : selectAll());
+
+  const clearAll = () => {
+    selectedMap.clear();
+    setSelected([]);
+  };
 
   return {
     selected,
+    noneSelected,
+    allSelected,
+    partiallySelected,
     setSelected,
-    ...singleActions,
-    ...allActions,
+    isSelected,
+    select: useMemoizedFn(select),
+    unSelect: useMemoizedFn(unSelect),
+    toggle: useMemoizedFn(toggle),
+    selectAll: useMemoizedFn(selectAll),
+    unSelectAll: useMemoizedFn(unSelectAll),
+    clearAll: useMemoizedFn(clearAll),
+    toggleAll: useMemoizedFn(toggleAll),
   } as const;
 }

@@ -1,69 +1,68 @@
 /**
- * title: Default usage
- * desc: a form that can add/remove fields dynamically.
+ * title: Basic usage
+ * desc: Dynamic list management
  *
- * title.zh-CN: 动态列表
- * desc.zh-CN: 可增删的不定条数表单
+ * title.zh-CN: 基础用法
+ * desc.zh-CN: 管理动态列表
  */
 
-import React, { useState } from 'react';
-import { Form, Button, Input, Icon } from 'antd';
-import { FormComponentProps } from 'antd/lib/form';
+import { MinusCircleOutlined, PlusCircleOutlined } from '@ant-design/icons';
 import { useDynamicList } from 'ahooks';
+import { Button, Input, Space } from 'antd';
+import React from 'react';
 
-export default Form.create()((props: FormComponentProps) => {
-  const { list, remove, getKey, push } = useDynamicList(['David', 'Jack']);
-  const { getFieldDecorator, validateFields } = props.form;
-
-  const [result, setResult] = useState('');
+export default () => {
+  const { list, remove, batchRemove, getKey, insert, replace } = useDynamicList(['David', 'Jack']);
+  const listIndexes = list.map((item, index) => index);
 
   const Row = (index: number, item: any) => (
-    <Form.Item key={getKey(index)}>
-      {getFieldDecorator(`names[${getKey(index)}]`, {
-        initialValue: item,
-        rules: [
-          {
-            required: true,
-            message: 'required',
-          },
-        ],
-      })(<Input style={{ width: 300 }} placeholder="Please enter your name" />)}
+    <div key={getKey(index)} style={{ marginBottom: 16 }}>
+      <Input
+        style={{ width: 300 }}
+        placeholder="Please enter name"
+        onChange={(e) => replace(index, e.target.value)}
+        value={item}
+      />
+
       {list.length > 1 && (
-        <Icon
-          type="minus-circle-o"
+        <MinusCircleOutlined
           style={{ marginLeft: 8 }}
           onClick={() => {
             remove(index);
           }}
         />
       )}
-      <Icon
-        type="plus-circle-o"
+      <PlusCircleOutlined
         style={{ marginLeft: 8 }}
         onClick={() => {
-          push('');
+          insert(index + 1, '');
         }}
       />
-    </Form.Item>
+    </div>
   );
 
   return (
     <>
-      <Form>{list.map((ele, index) => Row(index, ele))}</Form>
-      <Button
-        style={{ marginTop: 8 }}
-        type="primary"
-        onClick={() =>
-          validateFields((err, val) => {
-            if (!err) {
-              setResult(JSON.stringify((val || {}).names.filter((e: string) => !!e)));
-            }
-          })
-        }
-      >
-        Submit
-      </Button>
-      <div>{result}</div>
+      {list.map((ele, index) => Row(index, ele))}
+
+      <Space style={{ marginBottom: 16 }}>
+        <Button
+          danger
+          disabled={list.length <= 1}
+          onClick={() => batchRemove(listIndexes.filter((index) => index % 2 === 0))}
+        >
+          Remove odd items
+        </Button>
+        <Button
+          danger
+          disabled={list.length <= 1}
+          onClick={() => batchRemove(listIndexes.filter((index) => index % 2 !== 0))}
+        >
+          Remove even items
+        </Button>
+      </Space>
+
+      <div>{JSON.stringify([list])}</div>
     </>
   );
-});
+};

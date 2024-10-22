@@ -1,63 +1,64 @@
 import { useCallback, useRef, useState } from 'react';
+import isDev from '../utils/isDev';
 
-export default <T>(initialValue: T[]) => {
+const useDynamicList = <T>(initialList: T[] = []) => {
   const counterRef = useRef(-1);
-  // key 存储器
+
   const keyList = useRef<number[]>([]);
 
-  // 内部方法
   const setKey = useCallback((index: number) => {
     counterRef.current += 1;
     keyList.current.splice(index, 0, counterRef.current);
   }, []);
 
   const [list, setList] = useState(() => {
-    (initialValue || []).forEach((_, index) => {
+    initialList.forEach((_, index) => {
       setKey(index);
     });
-    return initialValue || [];
+    return initialList;
   });
 
-  const resetList = useCallback((newList: T[] = []) => {
+  const resetList = useCallback((newList: T[]) => {
     keyList.current = [];
     setList(() => {
-      (newList || []).forEach((_, index) => {
+      newList.forEach((_, index) => {
         setKey(index);
       });
-      return newList || [];
+      return newList;
     });
   }, []);
 
-  const insert = useCallback((index: number, obj: T) => {
+  const insert = useCallback((index: number, item: T) => {
     setList((l) => {
       const temp = [...l];
-      temp.splice(index, 0, obj);
+      temp.splice(index, 0, item);
       setKey(index);
       return temp;
     });
   }, []);
 
   const getKey = useCallback((index: number) => keyList.current[index], []);
+
   const getIndex = useCallback(
     (key: number) => keyList.current.findIndex((ele) => ele === key),
     [],
   );
 
-  const merge = useCallback((index: number, obj: T[]) => {
+  const merge = useCallback((index: number, items: T[]) => {
     setList((l) => {
       const temp = [...l];
-      obj.forEach((_, i) => {
+      items.forEach((_, i) => {
         setKey(index + i);
       });
-      temp.splice(index, 0, ...obj);
+      temp.splice(index, 0, ...items);
       return temp;
     });
   }, []);
 
-  const replace = useCallback((index: number, obj: T) => {
+  const replace = useCallback((index: number, item: T) => {
     setList((l) => {
       const temp = [...l];
-      temp[index] = obj;
+      temp[index] = item;
       return temp;
     });
   }, []);
@@ -77,18 +78,49 @@ export default <T>(initialValue: T[]) => {
     });
   }, []);
 
+  const batchRemove = useCallback((indexes: number[]) => {
+    if (!Array.isArray(indexes)) {
+      if (isDev) {
+        console.error(
+          `\`indexes\` parameter of \`batchRemove\` function expected to be an array, but got "${typeof indexes}".`,
+        );
+      }
+      return;
+    }
+    if (!indexes.length) {
+      return;
+    }
+
+    setList((prevList) => {
+      const newKeyList: number[] = [];
+      const newList = prevList.filter((item, index) => {
+        const shouldKeep = !indexes.includes(index);
+
+        if (shouldKeep) {
+          newKeyList.push(getKey(index));
+        }
+
+        return shouldKeep;
+      });
+
+      keyList.current = newKeyList;
+
+      return newList;
+    });
+  }, []);
+
   const move = useCallback((oldIndex: number, newIndex: number) => {
     if (oldIndex === newIndex) {
       return;
     }
     setList((l) => {
       const newList = [...l];
-      const temp = newList.filter((_: {}, index: number) => index !== oldIndex);
+      const temp = newList.filter((_, index: number) => index !== oldIndex);
       temp.splice(newIndex, 0, newList[oldIndex]);
 
       // move keys if necessary
       try {
-        const keyTemp = keyList.current.filter((_: {}, index: number) => index !== oldIndex);
+        const keyTemp = keyList.current.filter((_, index: number) => index !== oldIndex);
         keyTemp.splice(newIndex, 0, keyList.current[oldIndex]);
         keyList.current = keyTemp;
       } catch (e) {
@@ -99,10 +131,10 @@ export default <T>(initialValue: T[]) => {
     });
   }, []);
 
-  const push = useCallback((obj: T) => {
+  const push = useCallback((item: T) => {
     setList((l) => {
       setKey(l.length);
-      return l.concat([obj]);
+      return l.concat([item]);
     });
   }, []);
 
@@ -117,22 +149,12 @@ export default <T>(initialValue: T[]) => {
     setList((l) => l.slice(0, l.length - 1));
   }, []);
 
-  const unshift = useCallback((obj: T) => {
+  const unshift = useCallback((item: T) => {
     setList((l) => {
       setKey(0);
-      return [obj].concat(l);
+      return [item].concat(l);
     });
   }, []);
-
-  const sortForm = useCallback(
-    (result: unknown[]) =>
-      result
-        .map((item, index) => ({ key: index, item })) // add index into obj
-        .sort((a, b) => getIndex(a.key) - getIndex(b.key)) // sort based on the index of table
-        .filter((item) => !!item.item) // remove undefined(s)
-        .map((item) => item.item), // retrive the data
-    [],
-  );
 
   const shift = useCallback(() => {
     // remove keys if necessary
@@ -144,12 +166,23 @@ export default <T>(initialValue: T[]) => {
     setList((l) => l.slice(1, l.length));
   }, []);
 
+  const sortList = useCallback(
+    (result: T[]) =>
+      result
+        .map((item, index) => ({ key: index, item })) // add index into obj
+        .sort((a, b) => getIndex(a.key) - getIndex(b.key)) // sort based on the index of table
+        .filter((item) => !!item.item) // remove undefined(s)
+        .map((item) => item.item), // retrive the data
+    [],
+  );
+
   return {
     list,
     insert,
     merge,
     replace,
     remove,
+    batchRemove,
     getKey,
     getIndex,
     move,
@@ -157,7 +190,9 @@ export default <T>(initialValue: T[]) => {
     pop,
     unshift,
     shift,
-    sortForm,
+    sortList,
     resetList,
   };
 };
+
+export default useDynamicList;

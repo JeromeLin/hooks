@@ -3,7 +3,7 @@
  * desc: Checkbox group.
  *
  * title.zh-CN: 基础用法
- * desc.zh-CN: 常见的 checkbox 联动
+ * desc.zh-CN: 常见的 Checkbox 联动
  */
 
 import { Checkbox, Col, Row } from 'antd';
@@ -19,18 +19,16 @@ export default () => {
     return [1, 2, 3, 4, 5, 6, 7, 8];
   }, [hideOdd]);
 
-  const {
-    selected,
-    allSelected,
-    isSelected,
-    toggle,
-    toggleAll,
-    partiallySelected,
-  } = useSelections(list, [1]);
+  const { selected, allSelected, isSelected, toggle, toggleAll, partiallySelected } = useSelections(
+    list,
+    {
+      defaultSelected: [1],
+    },
+  );
 
   return (
     <div>
-      <div>Selected : {selected.join(',')}</div>
+      <div>Selected: {selected.join(',')}</div>
       <div style={{ borderBottom: '1px solid #E9E9E9', padding: '10px 0' }}>
         <Checkbox checked={allSelected} onClick={toggleAll} indeterminate={partiallySelected}>
           Check all

@@ -1,5 +1,5 @@
-import { renderHook, act } from '@testing-library/react-hooks';
-import { useResponsive } from '../';
+import { renderHook, act } from '../../utils/tests';
+import useResponsive from '../';
 
 describe('useResponsive', () => {
   function changeWidth(width: number) {

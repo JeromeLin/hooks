@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
-import usePersistFn from '../usePersistFn';
+import { useEffect, useMemo, useState } from 'react';
+import useLatest from '../useLatest';
+import { isNumber } from '../utils/index';
 
-export type TDate = Date | number | string | undefined;
+export type TDate = dayjs.ConfigType;
 
-export type Options = {
+export interface Options {
+  leftTime?: number;
   targetDate?: TDate;
   interval?: number;
   onEnd?: () => void;
-};
+}
 
 export interface FormattedRes {
   days: number;
@@ -18,16 +20,13 @@ export interface FormattedRes {
   milliseconds: number;
 }
 
-const calcLeft = (t?: TDate) => {
-  if (!t) {
+const calcLeft = (target?: TDate) => {
+  if (!target) {
     return 0;
   }
   // https://stackoverflow.com/questions/4310953/invalid-date-in-safari
-  const left = dayjs(t).valueOf() - new Date().getTime();
-  if (left < 0) {
-    return 0;
-  }
-  return left;
+  const left = dayjs(target).valueOf() - Date.now();
+  return left < 0 ? 0 : left;
 };
 
 const parseMs = (milliseconds: number): FormattedRes => {
@@ -40,17 +39,18 @@ const parseMs = (milliseconds: number): FormattedRes => {
   };
 };
 
-const useCountdown = (options?: Options) => {
-  const { targetDate, interval = 1000, onEnd } = options || {};
+const useCountdown = (options: Options = {}) => {
+  const { leftTime, targetDate, interval = 1000, onEnd } = options || {};
 
-  const [target, setTargetDate] = useState<TDate>(targetDate);
+  const memoLeftTime = useMemo<TDate>(() => {
+    return isNumber(leftTime) && leftTime > 0 ? Date.now() + leftTime : undefined;
+  }, [leftTime]);
+
+  const target = 'leftTime' in options ? memoLeftTime : targetDate;
+
   const [timeLeft, setTimeLeft] = useState(() => calcLeft(target));
 
-  const onEndPersistFn = usePersistFn(() => {
-    if (onEnd) {
-      onEnd();
-    }
-  });
+  const onEndRef = useLatest(onEnd);
 
   useEffect(() => {
     if (!target) {
@@ -67,18 +67,16 @@ const useCountdown = (options?: Options) => {
       setTimeLeft(targetLeft);
       if (targetLeft === 0) {
         clearInterval(timer);
-          onEndPersistFn();
+        onEndRef.current?.();
       }
     }, interval);
 
     return () => clearInterval(timer);
   }, [target, interval]);
 
-  const formattedRes = useMemo(() => {
-    return parseMs(timeLeft);
-  }, [timeLeft]);
+  const formattedRes = useMemo(() => parseMs(timeLeft), [timeLeft]);
 
-  return [timeLeft, setTargetDate, formattedRes] as const;
+  return [timeLeft, formattedRes] as const;
 };
 
 export default useCountdown;

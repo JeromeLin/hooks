@@ -1,11 +1,6 @@
 ---
-title: useHistoryTravel
 nav:
-  title: Hooks
   path: /hooks
-group:
-  title: State
-  path: /state
 ---
 
 # useHistoryTravel
@@ -22,27 +17,40 @@ A hook to manage state change history. It provides encapsulation methods to trav
 
 <code src="./demo/demo2.tsx" />
 
+### Limit maximum history length
+
+<code src="./demo/demo3.tsx" />
+
 ## API
 
 ```typescript
-const { value, setValue, backLength, forwardLength, go, back, forward, reset } = useHistoryTravel<T>(initialValue?: T);
+const {
+  value,
+  setValue,
+  backLength,
+  forwardLength,
+  go,
+  back,
+  forward
+} = useHistoryTravel<T>(initialValue?: T, maxLength: number = 0 );
 ```
 
 ### Params
 
-| Property      | Description            | Type | Default |
-|---------------|------------------------|------|---------|
-| initialValue? | optional initial value | `T`  | -       |
+| Property     | Description                                                                                                               | Type     | Default     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------- | -------- | ----------- |
+| initialValue | Optional initial value                                                                                                    | `T`      | -           |
+| maxLength    | Optional limit the maximum length of history records. If the maximum length is exceeded, the first record will be deleted | `number` | 0 unlimited |
 
 ### Result
 
-| Property      | Description                                                                       | Type                          |
-|---------------|-----------------------------------------------------------------------------------|-------------------------------|
-| value         | current value                                                                     | `T`                           |
-| setValue      | function to set value                                                             | `T => void`                   |
-| backLength    | the length of backward history                                                    | `number`                      |
-| forwardLength | the length of forward history                                                     | `number`                      |
-| go            | move between the history, move backward on step < 0，and move forward on step > 0 | `(step: number) => void`      |
-| back          | move one step backward in history                                                 | `() => void`                  |
-| foward        | move one step forward in history                                                  | `() => void`                  |
-| reset         | reset history to initial value by default or provide a new initial value.         | (newInitialValue?: T) => void |
+| Property      | Description                                                                       | Type                            |
+| ------------- | --------------------------------------------------------------------------------- | ------------------------------- |
+| value         | Current value                                                                     | `T`                             |
+| setValue      | Set value                                                                         | `(value: T) => void`            |
+| backLength    | The length of backward history                                                    | `number`                        |
+| forwardLength | The length of forward history                                                     | `number`                        |
+| go            | Move between the history, move backward on step < 0，and move forward on step > 0 | `(step: number) => void`        |
+| back          | Move one step backward                                                            | `() => void`                    |
+| foward        | Move one step forward                                                             | `() => void`                    |
+| reset         | Reset history to initial value by default or provide a new initial value.         | `(newInitialValue?: T) => void` |

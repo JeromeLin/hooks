@@ -1,40 +1,42 @@
-/* eslint-disable max-len */
-import { useState, useMemo, useCallback } from 'react';
+import { useState } from 'react';
+import useMemoizedFn from '../useMemoizedFn';
 
 function useSet<K>(initialValue?: Iterable<K>) {
-  const initialSet = useMemo<Set<K>>(
-    () => (initialValue === undefined ? new Set() : new Set(initialValue)) as Set<K>,
-    [],
-  );
-  const [set, setSet] = useState(initialSet);
+  const getInitValue = () => new Set(initialValue);
+  const [set, setSet] = useState<Set<K>>(getInitValue);
 
-  const stableActions = useMemo(
-    () => ({
-      add: (key: K) => {
-        setSet((prevSet) => {
-          const temp = new Set(prevSet);
-          temp.add(key);
-          return temp;
-        });
-      },
-      remove: (key: K) => {
-        setSet((prevSet) => {
-          const temp = new Set(prevSet);
-          temp.delete(key);
-          return temp;
-        });
-      },
-      reset: () => setSet(initialSet),
-    }),
-    [setSet, initialSet],
-  );
-
-  const utils = {
-    has: useCallback((key: K) => set.has(key), [set]),
-    ...stableActions,
+  const add = (key: K) => {
+    if (set.has(key)) {
+      return;
+    }
+    setSet((prevSet) => {
+      const temp = new Set(prevSet);
+      temp.add(key);
+      return temp;
+    });
   };
 
-  return [set, utils] as const;
+  const remove = (key: K) => {
+    if (!set.has(key)) {
+      return;
+    }
+    setSet((prevSet) => {
+      const temp = new Set(prevSet);
+      temp.delete(key);
+      return temp;
+    });
+  };
+
+  const reset = () => setSet(getInitValue());
+
+  return [
+    set,
+    {
+      add: useMemoizedFn(add),
+      remove: useMemoizedFn(remove),
+      reset: useMemoizedFn(reset),
+    },
+  ] as const;
 }
 
 export default useSet;

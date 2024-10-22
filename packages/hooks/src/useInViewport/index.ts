@@ -1,59 +1,58 @@
-import { useEffect, useState } from 'react';
 import 'intersection-observer';
-import { getTargetElement, BasicTarget } from '../utils/dom';
+import { useState } from 'react';
+import type { BasicTarget } from '../utils/domTarget';
+import { getTargetElement } from '../utils/domTarget';
+import useEffectWithTarget from '../utils/useEffectWithTarget';
 
-type InViewport = boolean | undefined;
+type CallbackType = (entry: IntersectionObserverEntry) => void;
 
-function isInViewPort(el: HTMLElement): InViewport  {
-  if (!el) {
-    return undefined;
-  }
-
-  const viewPortWidth =
-    window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
-  const viewPortHeight =
-    window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
-  const rect = el.getBoundingClientRect();
-
-  if (rect) {
-    const { top, bottom, left, right } = rect;
-    return bottom > 0 && top <= viewPortHeight && left <= viewPortWidth && right > 0;
-  }
-
-  return false;
+export interface Options {
+  rootMargin?: string;
+  threshold?: number | number[];
+  root?: BasicTarget<Element>;
+  callback?: CallbackType;
 }
 
-function useInViewport(target: BasicTarget): InViewport {
-  const [inViewPort, setInViewport] = useState<InViewport>(() => {
-    const el = getTargetElement(target);
+function useInViewport(target: BasicTarget | BasicTarget[], options?: Options) {
+  const { callback, ...option } = options || {};
 
-    return isInViewPort(el as HTMLElement);
-  });
+  const [state, setState] = useState<boolean>();
+  const [ratio, setRatio] = useState<number>();
 
-  useEffect(() => {
-    const el = getTargetElement(target);
-    if (!el) {
-      return () => {};
-    }
+  useEffectWithTarget(
+    () => {
+      const targets = Array.isArray(target) ? target : [target];
+      const els = targets.map((element) => getTargetElement(element)).filter(Boolean);
 
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          setInViewport(true);
-        } else {
-          setInViewport(false);
-        }
+      if (!els.length) {
+        return;
       }
-    });
 
-    observer.observe(el as HTMLElement);
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            setRatio(entry.intersectionRatio);
+            setState(entry.isIntersecting);
+            callback?.(entry);
+          }
+        },
+        {
+          ...option,
+          root: getTargetElement(options?.root),
+        },
+      );
 
-    return () => {
-      observer.disconnect();
-    };
-  }, [target]);
+      els.forEach((el) => observer.observe(el!));
 
-  return inViewPort;
+      return () => {
+        observer.disconnect();
+      };
+    },
+    [options?.rootMargin, options?.threshold, callback],
+    target,
+  );
+
+  return [state, ratio] as const;
 }
 
 export default useInViewport;

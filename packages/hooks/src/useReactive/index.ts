@@ -1,17 +1,14 @@
-import { useRef, useState } from 'react';
-
+import { useRef } from 'react';
+import isPlainObject from 'lodash/isPlainObject';
 import useCreation from '../useCreation';
+import useUpdate from '../useUpdate';
 
 // k:v 原对象:代理过的对象
 const proxyMap = new WeakMap();
 // k:v 代理过的对象:原对象
 const rawMap = new WeakMap();
 
-function isObject(val: object): boolean {
-  return typeof val === 'object' && val !== null;
-}
-
-function observer<T extends object>(initialVal: T, cb: () => void): T {
+function observer<T extends Record<string, any>>(initialVal: T, cb: () => void): T {
   const existingProxy = proxyMap.get(initialVal);
 
   // 添加缓存 防止重新构建proxy
@@ -28,7 +25,16 @@ function observer<T extends object>(initialVal: T, cb: () => void): T {
   const proxy = new Proxy<T>(initialVal, {
     get(target, key, receiver) {
       const res = Reflect.get(target, key, receiver);
-      return isObject(res) ? observer(res, cb) : Reflect.get(target, key);
+
+      // https://github.com/alibaba/hooks/issues/1317
+      const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+      if (!descriptor?.configurable && !descriptor?.writable) {
+        return res;
+      }
+
+      // Only proxy plain object or array,
+      // otherwise it will cause: https://github.com/alibaba/hooks/issues/2080
+      return isPlainObject(res) || Array.isArray(res) ? observer(res, cb) : res;
     },
     set(target, key, val) {
       const ret = Reflect.set(target, key, val);
@@ -48,16 +54,17 @@ function observer<T extends object>(initialVal: T, cb: () => void): T {
   return proxy;
 }
 
-function useReactive<S extends object>(initialState: S): S {
-  const [, setFlag] = useState({});
+function useReactive<S extends Record<string, any>>(initialState: S): S {
+  const update = useUpdate();
   const stateRef = useRef<S>(initialState);
 
   const state = useCreation(() => {
     return observer(stateRef.current, () => {
-      setFlag({});
+      update();
     });
   }, []);
 
   return state;
 }
+
 export default useReactive;

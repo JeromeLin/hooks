@@ -1,151 +1,244 @@
-import { act, renderHook } from '@testing-library/react-hooks';
+import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import useSelections from '../index';
+import type { Options } from '../index';
 
-/* 暂时关闭 act 警告  见：https://github.com/testing-library/react-testing-library/issues/281#issuecomment-480349256 */
-const originalError = console.error;
-beforeAll(() => {
-  console.error = (...args: any) => {
-    if (/Warning.*not wrapped in act/.test(args[0])) {
-      return;
-    }
-    originalError.call(console, ...args);
-  };
-});
+const _data = [1, 2, 3];
+const _selected = [1];
+const _selectedItem = 1;
 
-afterAll(() => {
-  console.error = originalError;
-});
+const _dataObj = [{ id: 1 }, { id: 2 }, { id: 3 }];
+const _selectedObj = [{ id: 1 }];
+const _selectedItemObj = { id: 1 };
 
-const data = [1, 2, 3];
+const setup = <T>(items: T[], options?: T[] | Options<T>) => {
+  return renderHook(() => useSelections(items, options));
+};
+
+interface CaseCallback<T = number | object> {
+  (data: T[], selected: T[], selectedItem: T): void;
+}
+
+const runCaseCallback = (
+  dataCallback: CaseCallback<number>,
+  objDataCallback: CaseCallback<object>,
+) => {
+  dataCallback(_data, _selected, _selectedItem);
+  objDataCallback(_dataObj, _selectedObj, _selectedItemObj);
+};
 
 describe('useSelections', () => {
-  it('should be defined', () => {
-    expect(useSelections).toBeDefined();
+  it('defaultSelected should work correct', () => {
+    const caseCallback: CaseCallback = (data, selected, selectedItem) => {
+      const { result } = setup(data, {
+        defaultSelected: selected,
+        itemKey: 'id',
+      });
+
+      expect(result.current.selected).toEqual(selected);
+      expect(result.current.isSelected(selectedItem)).toBe(true);
+    };
+
+    runCaseCallback(caseCallback, caseCallback);
   });
 
-  function useTestUseSelections() {
-    const [items, setItems] = useState(data);
-    const useSelectionsResult = useSelections(items, [1]);
-    return [useSelectionsResult, setItems] as const;
-  }
+  it('select and unSelect should work correct', () => {
+    const caseCallback: CaseCallback = (data, selected, selectedItem) => {
+      const { result } = setup(data, {
+        defaultSelected: selected,
+        itemKey: 'id',
+      });
+      const { unSelect, select } = result.current;
 
-  const setUp = () => renderHook(() => useTestUseSelections());
+      act(() => {
+        unSelect(selectedItem);
+      });
+      expect(result.current.selected).toEqual([]);
+      expect(result.current.isSelected(selectedItem)).toBe(false);
+      expect(result.current.allSelected).toBe(false);
 
-  const hookUtils = (hook: ReturnType<typeof setUp>) => {
-    const { current } = hook.result;
-    return {
-      seleected: current[0].selected,
-      helper: current[0],
-      setItems: current[1],
+      act(() => {
+        select(selectedItem);
+      });
+      expect(result.current.selected).toEqual(selected);
+      expect(result.current.isSelected(selectedItem)).toBe(true);
+      expect(result.current.allSelected).toBe(false);
     };
-  };
 
-  describe('test helper ', () => {
-    const hook = setUp();
-    it('defaultSelected should work correct', async () => {
-      expect(hookUtils(hook).seleected).toEqual([1]);
-      expect(hookUtils(hook).helper.isSelected(1)).toEqual(true);
-    });
-    it('select and unSelect should work correct', async () => {
-      act(() => {
-        hookUtils(hook).helper.unSelect(1);
-      });
-      expect(hookUtils(hook).seleected).toEqual([]);
-      expect(hookUtils(hook).helper.isSelected(1)).toEqual(false);
-      expect(hookUtils(hook).helper.allSelected).toEqual(false);
-      act(() => {
-        hookUtils(hook).helper.select(1);
-      });
-      expect(hookUtils(hook).seleected).toEqual([1]);
-      expect(hookUtils(hook).helper.isSelected(1)).toEqual(true);
-      expect(hookUtils(hook).helper.allSelected).toEqual(false);
-      act(() => {
-        hookUtils(hook).helper.unSelect(1);
-      });
-    });
+    runCaseCallback(caseCallback, caseCallback);
+  });
 
-    it('toggle should work correct', async () => {
-      act(() => {
-        hookUtils(hook).helper.toggle(1);
+  it('toggle should work correct', () => {
+    const caseCallback: CaseCallback = (data, selected, selectedItem) => {
+      const { result } = setup(data, {
+        itemKey: 'id',
       });
-      expect(hookUtils(hook).seleected).toEqual([1]);
-      expect(hookUtils(hook).helper.isSelected(1)).toEqual(true);
-      expect(hookUtils(hook).helper.allSelected).toEqual(false);
-      act(() => {
-        hookUtils(hook).helper.toggle(1);
-      });
-      expect(hookUtils(hook).seleected).toEqual([]);
-      expect(hookUtils(hook).helper.isSelected(1)).toEqual(false);
-      expect(hookUtils(hook).helper.allSelected).toEqual(false);
-    });
-
-    it('selectAll and unSelectAll should work correct', async () => {
-      expect(hookUtils(hook).helper.noneSelected).toEqual(true);
-      act(() => {
-        hookUtils(hook).helper.selectAll();
-      });
-      expect(hookUtils(hook).seleected).toEqual([1, 2, 3]);
-      expect(hookUtils(hook).helper.allSelected).toEqual(true);
-      expect(hookUtils(hook).helper.noneSelected).toEqual(false);
-      expect(hookUtils(hook).helper.partiallySelected).toEqual(false);
+      const { toggle } = result.current;
 
       act(() => {
-        hookUtils(hook).helper.unSelectAll();
+        toggle(selectedItem);
       });
-      expect(hookUtils(hook).seleected).toEqual([]);
-      expect(hookUtils(hook).helper.allSelected).toEqual(false);
-      expect(hookUtils(hook).helper.noneSelected).toEqual(true);
-      expect(hookUtils(hook).helper.partiallySelected).toEqual(false);
-    });
-
-    it('toggleAll should work correct', async () => {
-      expect(hookUtils(hook).helper.noneSelected).toEqual(true);
-      act(() => {
-        hookUtils(hook).helper.toggleAll();
-      });
-      expect(hookUtils(hook).seleected).toEqual([1, 2, 3]);
-      expect(hookUtils(hook).helper.allSelected).toEqual(true);
-      expect(hookUtils(hook).helper.noneSelected).toEqual(false);
-      expect(hookUtils(hook).helper.partiallySelected).toEqual(false);
+      expect(result.current.selected).toEqual(selected);
+      expect(result.current.isSelected(selectedItem)).toBe(true);
+      expect(result.current.allSelected).toBe(false);
 
       act(() => {
-        hookUtils(hook).helper.toggleAll();
+        toggle(selectedItem);
       });
-      expect(hookUtils(hook).seleected).toEqual([]);
-      expect(hookUtils(hook).helper.allSelected).toEqual(false);
-      expect(hookUtils(hook).helper.noneSelected).toEqual(true);
-      expect(hookUtils(hook).helper.partiallySelected).toEqual(false);
-    });
+      expect(result.current.selected).toEqual([]);
+      expect(result.current.isSelected(selectedItem)).toBe(false);
+      expect(result.current.allSelected).toBe(false);
+    };
 
-    it('setSelected should work correct', async () => {
-      expect(hookUtils(hook).helper.noneSelected).toEqual(true);
-      act(() => {
-        hookUtils(hook).helper.setSelected([1]);
-      });
-      expect(hookUtils(hook).seleected).toEqual([1]);
-      expect(hookUtils(hook).helper.isSelected(1)).toEqual(true);
-      expect(hookUtils(hook).helper.noneSelected).toEqual(false);
-      expect(hookUtils(hook).helper.allSelected).toEqual(false);
-      expect(hookUtils(hook).helper.partiallySelected).toEqual(true);
+    runCaseCallback(caseCallback, caseCallback);
+  });
 
-      act(() => {
-        hookUtils(hook).helper.setSelected([]);
+  it('selectAll and unSelectAll should work correct', async () => {
+    const caseCallback: CaseCallback = (data) => {
+      const { result } = setup(data, {
+        itemKey: 'id',
       });
-      expect(hookUtils(hook).seleected).toEqual([]);
-      expect(hookUtils(hook).helper.isSelected(1)).toEqual(false);
-      expect(hookUtils(hook).helper.noneSelected).toEqual(true);
-      expect(hookUtils(hook).helper.allSelected).toEqual(false);
-      expect(hookUtils(hook).helper.partiallySelected).toEqual(false);
+      const { selectAll, unSelectAll } = result.current;
+
+      expect(result.current.noneSelected).toBe(true);
+      act(() => {
+        selectAll();
+      });
+      expect(result.current.selected).toEqual(data);
+      expect(result.current.allSelected).toBe(true);
+      expect(result.current.noneSelected).toBe(false);
+      expect(result.current.partiallySelected).toBe(false);
 
       act(() => {
-        hookUtils(hook).helper.setSelected([1, 2, 3]);
+        unSelectAll();
       });
-      expect(hookUtils(hook).seleected).toEqual([1, 2, 3]);
-      expect(hookUtils(hook).helper.isSelected(1)).toEqual(true);
-      expect(hookUtils(hook).helper.noneSelected).toEqual(false);
-      expect(hookUtils(hook).helper.allSelected).toEqual(true);
-      expect(hookUtils(hook).helper.partiallySelected).toEqual(false);
-    });
+      expect(result.current.selected).toEqual([]);
+      expect(result.current.allSelected).toBe(false);
+      expect(result.current.noneSelected).toBe(true);
+      expect(result.current.partiallySelected).toBe(false);
+    };
+
+    runCaseCallback(caseCallback, caseCallback);
+  });
+
+  it('toggleAll should work correct', async () => {
+    const caseCallback: CaseCallback = (data) => {
+      const { result } = setup(data, {
+        itemKey: 'id',
+      });
+      const { toggleAll } = result.current;
+
+      expect(result.current.noneSelected).toBe(true);
+      act(() => {
+        toggleAll();
+      });
+      expect(result.current.selected).toEqual(data);
+      expect(result.current.allSelected).toBe(true);
+      expect(result.current.noneSelected).toBe(false);
+      expect(result.current.partiallySelected).toBe(false);
+
+      act(() => {
+        toggleAll();
+      });
+      expect(result.current.selected).toEqual([]);
+      expect(result.current.allSelected).toBe(false);
+      expect(result.current.noneSelected).toBe(true);
+      expect(result.current.partiallySelected).toBe(false);
+    };
+
+    runCaseCallback(caseCallback, caseCallback);
+  });
+
+  it('setSelected should work correct', async () => {
+    const caseCallback: CaseCallback = (data, selected, selectedItem) => {
+      const { result } = setup(data, {
+        itemKey: 'id',
+      });
+      const { setSelected } = result.current;
+
+      expect(result.current.noneSelected).toBe(true);
+      act(() => {
+        setSelected(selected);
+      });
+      expect(result.current.selected).toEqual(selected);
+      expect(result.current.isSelected(selectedItem)).toBe(true);
+      expect(result.current.noneSelected).toBe(false);
+      expect(result.current.allSelected).toBe(false);
+      expect(result.current.partiallySelected).toBe(true);
+
+      act(() => {
+        setSelected([]);
+      });
+      expect(result.current.selected).toEqual([]);
+      expect(result.current.isSelected(selectedItem)).toBe(false);
+      expect(result.current.noneSelected).toBe(true);
+      expect(result.current.allSelected).toBe(false);
+      expect(result.current.partiallySelected).toBe(false);
+
+      act(() => {
+        setSelected(data);
+      });
+      expect(result.current.selected).toEqual(data);
+      expect(result.current.isSelected(selectedItem)).toBe(true);
+      expect(result.current.noneSelected).toBe(false);
+      expect(result.current.allSelected).toBe(true);
+      expect(result.current.partiallySelected).toBe(false);
+
+      // Keep compatible with older versions.
+      act(() => {
+        expect(() => setSelected(undefined!)).not.toThrowError();
+        expect(() => setSelected(null!)).not.toThrowError();
+      });
+    };
+
+    runCaseCallback(caseCallback, caseCallback);
+  });
+
+  it('legacy parameter should work in <4.0', async () => {
+    const { result } = setup(_data, _selected);
+
+    expect(result.current.selected).toEqual(_selected);
+    expect(result.current.isSelected(_selectedItem)).toBe(true);
+  });
+
+  it('clearAll should work correct', async () => {
+    const runCase = (data, newData, remainData) => {
+      const { result } = renderHook(() => {
+        const [list, setList] = useState(data);
+        const hook = useSelections(list, {
+          itemKey: 'id',
+        });
+
+        return { setList, hook };
+      });
+      const { setSelected, unSelectAll, clearAll } = result.current.hook;
+
+      act(() => {
+        setSelected(data);
+      });
+      expect(result.current.hook.selected).toEqual(data);
+      expect(result.current.hook.allSelected).toBe(true);
+
+      act(() => {
+        result.current.setList(newData);
+      });
+      expect(result.current.hook.allSelected).toBe(false);
+
+      act(() => {
+        unSelectAll();
+      });
+      expect(result.current.hook.selected).toEqual(remainData);
+
+      act(() => {
+        clearAll();
+      });
+      expect(result.current.hook.selected).toEqual([]);
+      expect(result.current.hook.allSelected).toEqual(false);
+      expect(result.current.hook.noneSelected).toBe(true);
+      expect(result.current.hook.partiallySelected).toBe(false);
+    };
+
+    runCase(_data, [3, 4, 5], [1, 2]);
+    runCase(_dataObj, [{ id: 3 }, { id: 4 }, { id: 5 }], [{ id: 1 }, { id: 2 }]);
   });
 });

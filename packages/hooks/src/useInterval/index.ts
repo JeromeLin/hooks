@@ -1,29 +1,29 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import useMemoizedFn from '../useMemoizedFn';
+import { isNumber } from '../utils';
 
-function useInterval(
-  fn: () => void,
-  delay: number | null | undefined,
-  options?: {
-    immediate?: boolean;
-  },
-): void {
-  const immediate = options?.immediate;
+const useInterval = (fn: () => void, delay?: number, options: { immediate?: boolean } = {}) => {
+  const timerCallback = useMemoizedFn(fn);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fnRef = useRef<() => void>();
-  fnRef.current = fn;
+  const clear = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
-    if (delay === undefined || delay === null) return;
-    if (immediate) {
-      fnRef.current?.();
+    if (!isNumber(delay) || delay < 0) {
+      return;
     }
-    const timer = setInterval(() => {
-      fnRef.current?.();
-    }, delay);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [delay]);
-}
+    if (options.immediate) {
+      timerCallback();
+    }
+    timerRef.current = setInterval(timerCallback, delay);
+    return clear;
+  }, [delay, options.immediate]);
+
+  return clear;
+};
 
 export default useInterval;

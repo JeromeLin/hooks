@@ -1,16 +1,11 @@
 ---
-title: useKeyPress
 nav:
-  title: Hooks
   path: /hooks
-group:
-  title: Dom
-  path: /dom
 ---
 
 # useKeyPress
 
-A hook that elegantly manages KeyboardEvent of keyup and keydown, Keyboard key combinations are supported to define key and keyCode alias input for keyboard events.
+Listen for the keyboard press, support key combinations, and support alias.
 
 ## Examples
 
@@ -18,15 +13,23 @@ A hook that elegantly manages KeyboardEvent of keyup and keydown, Keyboard key c
 
 <code src="./demo/demo1.tsx" />
 
-### Use key aliases
+### Combination keys
 
-<code src="./demo/demo2.tsx" />
+<code src="./demo/demo6.tsx" />
 
-### Compound mode
+### Exact match
+
+<code src="./demo/demo7.tsx"/>
+
+### Multiple keys
 
 <code src="./demo/demo3.tsx" />
 
-### Advanced
+### Get the trigger key
+
+<code src="./demo/demo8.tsx" />
+
+### Custom method
 
 <code src="./demo/demo4.tsx" />
 
@@ -37,49 +40,40 @@ A hook that elegantly manages KeyboardEvent of keyup and keydown, Keyboard key c
 ## API
 
 ```typescript
+type KeyType = number | string;
+type KeyFilter = KeyType | KeyType[] | ((event: KeyboardEvent) => boolean);
+
 useKeyPress(
-  keyFilter: KeyFilter, 
-  eventHandler: EventHandler = noop, 
+  keyFilter: KeyFilter,
+  eventHandler: (event: KeyboardEvent, key: KeyType) => void,
   options?: Options
-)
+);
 ```
 
 ### Params
 
-> Tips: keyType is the key or keyCode of KeyboardEvent.
-
-| Property | Description                                                        | Type                   | Default |
-|---------|----------------------------------------------|------------------------|--------|
-| keyFilter | Support for key and keyCode in keyboard events,function that return Boolean, key aliases  | `keyType` \| `Array<keyType>` \| `(event: KeyboardEvent) => boolean` | -      |
-| eventHandler | Callback Function  | `(event: KeyboardEvent) => void` | -      |
-| options | advanced options，see Options below | `Options`              | -              | 
+| Property     | Description                                                      | Type                                                            | Default |
+| ------------ | ---------------------------------------------------------------- | --------------------------------------------------------------- | ------- |
+| keyFilter    | Support keyCode、alias、combination keys、array、custom function | `KeyType` \| `KeyType[]` \| `(event: KeyboardEvent) => boolean` | -       |
+| eventHandler | Callback function                                                | `(event: KeyboardEvent, key: KeyType) => void`                  | -       |
+| options      | Advanced options                                                 | `Options`                                                       | -       |
 
 ### Options
 
-| Property | Description                                                        | Type                   | Default |
-|-----------------|--------------------------------------------------------|---------|--------|
-| events | Trigger Events  |  Array<keydown \| keyup\> | `['keydown']`     |
-| target | DOM element or Ref Object | `() => HTMLElement` \| `HTMLElement` \| `React.MutableRefObject`  | - |
+| Property   | Description                                                                                                                                    | Type                                                        | Default       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------- |
+| events     | Trigger Events                                                                                                                                 | `('keydown' \| 'keyup')[]`                                  | `['keydown']` |
+| target     | DOM element or ref                                                                                                                             | `() => Element` \| `Element` \| `MutableRefObject<Element>` | -             |
+| exactMatch | Exact match. If set `true`, the event will only be trigger when the keys match exactly. For example, pressing [shift + c] will not trigger [c] | `boolean`                                                   | `false`       |
+| useCapture | to block events bubbling                                                                                                                       | `boolean`                                                   | `false`       |
 
 ## Remarks
 
-1.All key aliases
+1. All key alias refer to [code](https://github.com/alibaba/hooks/blob/master/packages/hooks/src/useKeyPress/index.ts#L21)
 
-```javascript
-enter
-tab
-delete ('Backspace', 'Delete')
-esc
-space
-up
-down
-left
-right
-```
+2. Modifier keys
 
-2.Modifier keys
-
-```javascript
+```text
 ctrl
 alt
 shift

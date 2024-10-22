@@ -1,43 +1,78 @@
-type getDragPropsFn = (
-  data: any,
-) => {
-  draggable: 'true';
-  key?: string;
-  onDragStart: (e: React.DragEvent) => void;
-  onDragEnd: (e: React.DragEvent) => void;
-};
+import { useRef } from 'react';
+import useLatest from '../useLatest';
+import useMount from '../useMount';
+import { isString } from '../utils';
+import type { BasicTarget } from '../utils/domTarget';
+import { getTargetElement } from '../utils/domTarget';
+import useEffectWithTarget from '../utils/useEffectWithTarget';
 
-interface IConfig {
-  onDragStart?: (data: any, e: React.DragEvent) => void;
-  onDragEnd?: (data: any, e: React.DragEvent) => void;
-  /**
-   * 是否在getProps方法返回的对象中包含默认的key
-   *
-   * @default true
-   */
-  getPropsWithKey?: boolean;
+export interface Options {
+  onDragStart?: (event: React.DragEvent) => void;
+  onDragEnd?: (event: React.DragEvent) => void;
+  dragImage?: {
+    image: string | Element;
+    offsetX?: number;
+    offsetY?: number;
+  };
 }
 
-const useDrag = (config?: IConfig): getDragPropsFn => {
-  const getProps = (data: any) => {
-    return {
-      key: config && config.getPropsWithKey === false ? undefined : JSON.stringify(data),
-      draggable: 'true' as const,
-      onDragStart: (e: React.DragEvent) => {
-        if (config && config.onDragStart) {
-          config.onDragStart(data, e);
-        }
-        e.dataTransfer.setData('custom', JSON.stringify(data));
-      },
-      onDragEnd: (e: React.DragEvent) => {
-        if (config && config.onDragEnd) {
-          config.onDragEnd(data, e);
-        }
-      },
-    };
-  };
+const useDrag = <T>(data: T, target: BasicTarget, options: Options = {}) => {
+  const optionsRef = useLatest(options);
+  const dataRef = useLatest(data);
+  const imageElementRef = useRef<Element>();
 
-  return getProps;
+  const { dragImage } = optionsRef.current;
+
+  useMount(() => {
+    if (dragImage?.image) {
+      const { image } = dragImage;
+
+      if (isString(image)) {
+        const imageElement = new Image();
+
+        imageElement.src = image;
+        imageElementRef.current = imageElement;
+      } else {
+        imageElementRef.current = image;
+      }
+    }
+  });
+
+  useEffectWithTarget(
+    () => {
+      const targetElement = getTargetElement(target);
+      if (!targetElement?.addEventListener) {
+        return;
+      }
+
+      const onDragStart = (event: React.DragEvent) => {
+        optionsRef.current.onDragStart?.(event);
+        event.dataTransfer.setData('custom', JSON.stringify(dataRef.current));
+
+        if (dragImage?.image && imageElementRef.current) {
+          const { offsetX = 0, offsetY = 0 } = dragImage;
+
+          event.dataTransfer.setDragImage(imageElementRef.current, offsetX, offsetY);
+        }
+      };
+
+      const onDragEnd = (event: React.DragEvent) => {
+        optionsRef.current.onDragEnd?.(event);
+      };
+
+      targetElement.setAttribute('draggable', 'true');
+
+      targetElement.addEventListener('dragstart', onDragStart as any);
+      targetElement.addEventListener('dragend', onDragEnd as any);
+
+      return () => {
+        targetElement.removeEventListener('dragstart', onDragStart as any);
+        targetElement.removeEventListener('dragend', onDragEnd as any);
+      };
+    },
+    [],
+    target,
+  );
 };
 
 export default useDrag;

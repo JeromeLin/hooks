@@ -1,11 +1,3 @@
-/**
- * title: Default usage
- * desc: WebSocket hooks used.
- *
- * title.zh-CN: 基础用法
- * desc.zh-CN: webSocket hooks 使用
- */
-
 import React, { useRef, useMemo } from 'react';
 import { useWebSocket } from 'ahooks';
 
@@ -17,15 +9,16 @@ enum ReadyState {
 }
 
 export default () => {
-  const messageHistory = useRef([]);
+  const messageHistory = useRef<any[]>([]);
 
   const { readyState, sendMessage, latestMessage, disconnect, connect } = useWebSocket(
-    'wss://echo.websocket.org',
+    'wss://ws.postman-echo.com/raw',
   );
 
-  messageHistory.current = useMemo(() => messageHistory.current.concat(latestMessage), [
-    latestMessage,
-  ]);
+  messageHistory.current = useMemo(
+    () => messageHistory.current.concat(latestMessage),
+    [latestMessage],
+  );
 
   return (
     <div>
@@ -47,13 +40,15 @@ export default () => {
       </button>
       {/* connect */}
       <button onClick={() => connect && connect()} disabled={readyState === ReadyState.Open}>
-        📞 connect
+        {readyState === ReadyState.Connecting ? 'connecting' : '📞 connect'}
       </button>
       <div style={{ marginTop: 8 }}>readyState: {readyState}</div>
       <div style={{ marginTop: 8 }}>
         <p>received message: </p>
         {messageHistory.current.map((message, index) => (
-          <p key={index}>{message?.data}</p>
+          <p key={index} style={{ wordWrap: 'break-word' }}>
+            {message?.data}
+          </p>
         ))}
       </div>
     </div>

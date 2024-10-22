@@ -1,84 +1,75 @@
-/* eslint-disable no-global-assign, no-restricted-globals */
-import React from 'react';
-import { act, renderHook, RenderHookResult } from '@testing-library/react-hooks';
-import useUrlState from '../index';
-import routeData from 'react-router';
-
-/* 暂时关闭 act 警告  见：https://github.com/testing-library/react-testing-library/issues/281#issuecomment-480349256 */
-const originalError = console.error;
-
-beforeAll(() => {
-  console.error = (...args: any) => {
-    if (/Warning.*not wrapped in act/.test(args[0])) {
-      return;
-    }
-    originalError.call(console, ...args);
-  };
-});
-
-afterAll(() => {
-  console.error = originalError;
-});
+import { act } from '@testing-library/react';
+import { setup } from '.';
 
 describe('useUrlState', () => {
-  it('should be defined', () => {
-    expect(useUrlState).toBeDefined();
+  it('state should be url search params', () => {
+    const res = setup([
+      {
+        pathname: '/index',
+        search: '?count=1',
+      },
+    ]);
+    expect(res.state).toMatchObject({ count: '1' });
   });
 
-  describe('test url', () => {
-    let hook: RenderHookResult<
-      [string, number],
-      [number, ((s: any) => void) | (() => (s: any) => any)]
-    >;
+  it('url shoule be changed when use setState', () => {
+    const res = setup(['/index']);
+    expect(res.state).toMatchObject({});
+    act(() => {
+      res.setState({ count: 1 });
+    });
+    expect(res.state).toMatchObject({ count: '1' });
+  });
 
-    function setup(key: string, value: string) {
-      hook = renderHook(() => {
-        return useUrlState({ [key]: value });
-      }) as any;
-      hook.rerender();
-    }
+  it('multiple states should be work', () => {
+    const res = setup(['/index']);
+    act(() => {
+      res.setState({ page: 1 });
+    });
+    act(() => {
+      res.setState({ pageSize: 10 });
+    });
+    expect(res.state).toMatchObject({ page: '1', pageSize: '10' });
+  });
 
-    const replaceFn = jest.fn();
-
-    const mockLocation = {
-      pathname: '/',
-      hash: '',
-      search: '',
-      state: '',
-    };
-
-    const mockHistory: any = {
-      push: ({ search }) => {
-        replaceFn();
-        mockLocation.search = search;
+  it('query-string options should work', async () => {
+    const res = setup(
+      [
+        {
+          pathname: '/index',
+          search: '?foo=1,2,3',
+        },
+      ],
+      {},
+      {
+        parseOptions: {
+          arrayFormat: 'comma',
+        },
+        stringifyOptions: {
+          arrayFormat: 'comma',
+        },
       },
-    };
+    );
+    expect(res.state).toMatchObject({ foo: ['1', '2', '3'] });
 
-    beforeEach(() => {
-      jest.spyOn(routeData, 'useLocation').mockReturnValue(mockLocation);
-      jest.spyOn(routeData, 'useHistory').mockReturnValue(mockHistory);
+    act(() => {
+      res.setState({ foo: ['4', '5', '6'] });
     });
+    expect(res.state).toMatchObject({ foo: ['4', '5', '6'] });
+  });
 
-    afterEach(() => {
-      hook.unmount();
+  it('location.state should be remain', () => {
+    const res = setup([
+      {
+        pathname: '/index',
+        state: 'state',
+      },
+    ]);
+    expect(res.location.state).toBe('state');
+    act(() => {
+      res.setState({ count: 1 });
     });
-
-    it('history replace should work', async () => {
-      act(() => {
-        setup('mock', '0');
-      });
-      expect(replaceFn).toBeCalledTimes(0);
-      expect(hook.result.current[0]).toEqual({ mock: '0' });
-      expect(mockLocation.search).toEqual('');
-      act(() => {
-        hook.result.current[1]({ mock: 1 });
-      });
-      expect(replaceFn).toBeCalledTimes(1);
-      expect(mockLocation.search).toEqual('mock=1');
-      act(() => {
-        hook.result.current[1]({ mock: 2, test: 3 });
-      });
-      expect(mockLocation.search).toEqual('mock=2&test=3');
-    });
+    expect(res.state).toMatchObject({ count: '1' });
+    expect(res.location.state).toBe('state');
   });
 });

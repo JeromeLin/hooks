@@ -1,5 +1,9 @@
-import { useEffect, useRef } from 'react';
-import { BasicTarget, getTargetElement } from '../utils/dom';
+import useLatest from '../useLatest';
+import type { BasicTarget } from '../utils/domTarget';
+import { getTargetElement } from '../utils/domTarget';
+import useEffectWithTarget from '../utils/useEffectWithTarget';
+
+type noop = (...p: any) => void;
 
 export type Target = BasicTarget<HTMLElement | Element | Window | Document>;
 
@@ -8,6 +12,7 @@ type Options<T extends Target = Target> = {
   capture?: boolean;
   once?: boolean;
   passive?: boolean;
+  enable?: boolean;
 };
 
 function useEventListener<K extends keyof HTMLElementEventMap>(
@@ -30,36 +35,54 @@ function useEventListener<K extends keyof WindowEventMap>(
   handler: (ev: WindowEventMap[K]) => void,
   options?: Options<Window>,
 ): void;
-function useEventListener(eventName: string, handler: Function, options: Options): void;
+function useEventListener(
+  eventName: string | string[],
+  handler: (event: Event) => void,
+  options?: Options<Window>,
+): void;
+function useEventListener(eventName: string | string[], handler: noop, options: Options): void;
 
-function useEventListener(eventName: string, handler: Function, options: Options = {}) {
-  const handlerRef = useRef<Function>();
-  handlerRef.current = handler;
+function useEventListener(eventName: string | string[], handler: noop, options: Options = {}) {
+  const { enable = true } = options;
 
-  useEffect(() => {
-    const targetElement = getTargetElement(options.target, window)!;
-    if (!targetElement.addEventListener) {
-      return;
-    }
+  const handlerRef = useLatest(handler);
 
-    const eventListener = (
-      event: Event,
-    ): EventListenerOrEventListenerObject | AddEventListenerOptions => {
-      return handlerRef.current && handlerRef.current(event);
-    };
+  useEffectWithTarget(
+    () => {
+      if (!enable) {
+        return;
+      }
 
-    targetElement.addEventListener(eventName, eventListener, {
-      capture: options.capture,
-      once: options.once,
-      passive: options.passive,
-    });
+      const targetElement = getTargetElement(options.target, window);
+      if (!targetElement?.addEventListener) {
+        return;
+      }
 
-    return () => {
-      targetElement.removeEventListener(eventName, eventListener, {
-        capture: options.capture,
+      const eventListener = (event: Event) => {
+        return handlerRef.current(event);
+      };
+
+      const eventNameArray = Array.isArray(eventName) ? eventName : [eventName];
+
+      eventNameArray.forEach((event) => {
+        targetElement.addEventListener(event, eventListener, {
+          capture: options.capture,
+          once: options.once,
+          passive: options.passive,
+        });
       });
-    };
-  }, [eventName, options.target, options.capture, options.once, options.passive]);
+
+      return () => {
+        eventNameArray.forEach((event) => {
+          targetElement.removeEventListener(event, eventListener, {
+            capture: options.capture,
+          });
+        });
+      };
+    },
+    [eventName, options.capture, options.once, options.passive, enable],
+    options.target,
+  );
 }
 
 export default useEventListener;

@@ -1,41 +1,23 @@
-import { act, renderHook, RenderHookResult } from '@testing-library/react-hooks';
-import useAntdTable, { BaseOptions, Result } from '../index';
-
-const sleep = (s) => {
-  return new Promise((resolve) => {
-    setTimeout(resolve, s * 1000);
-  });
-};
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { sleep } from '../../utils/testingHelpers';
+import useAntdTable from '../index';
 
 interface Query {
   current: number;
   pageSize: number;
+
   [key: string]: any;
 }
 
 describe('useAntdTable', () => {
-  const originalError = console.error;
-  beforeAll(() => {
-    console.error = (...args: any) => {
-      if (/Warning.*not wrapped in act/.test(args[0])) {
-        return;
-      }
-      originalError.call(console, ...args);
-    };
-  });
-  afterAll(() => {
-    changeSearchType('simple');
-    console.error = originalError;
-  });
   // jest.useFakeTimers();
+
   let queryArgs: any;
   const asyncFn = (query: Query, formData: any = {}) => {
     queryArgs = { ...query, ...formData };
     return Promise.resolve({
-      current: query.current,
       total: 20,
-      pageSize: query.pageSize,
-      data: [],
+      list: [],
     });
   };
 
@@ -50,14 +32,12 @@ describe('useAntdTable', () => {
       name: 'default name',
     },
     getFieldsValue() {
-      return this.fieldsValue;
-    },
-    getFieldInstance(key: string) {
-      // 根据不同的 type 返回不同的 fieldsValues
       if (searchType === 'simple') {
-        return ['name'].includes(key);
+        return {
+          name: this.fieldsValue.name,
+        };
       }
-      return ['name', 'email', 'phone'].includes(key);
+      return this.fieldsValue;
     },
     setFieldsValue(values: object) {
       this.fieldsValue = {
@@ -68,8 +48,12 @@ describe('useAntdTable', () => {
     resetFields() {
       this.fieldsValue = { ...this.initialValue };
     },
-    validateFields: () => {
-      return Promise.resolve(true);
+    validateFields(fields) {
+      const targetFileds = {};
+      fields.forEach((field) => {
+        targetFileds[field] = this.fieldsValue[field];
+      });
+      return Promise.resolve(targetFileds);
     },
   };
 
@@ -77,49 +61,156 @@ describe('useAntdTable', () => {
     searchType = type;
   };
 
-  const setUp = ({ asyncFn: fn, options }: any) => renderHook(() => useAntdTable(fn, options));
+  const setUp = (service, options) => renderHook((o) => useAntdTable(service, o || options));
 
-  let hook: RenderHookResult<
-    { func: (...args: any[]) => Promise<{}>; opt: BaseOptions<any> },
-    Result<any>
-  >;
+  let hook: any;
 
-  it('should be defined', () => {
-    expect(useAntdTable).toBeDefined();
-  });
+  // afterEach(() => {
+  //   form.resetFields();
+  //   changeSearchType('simple');
+  //   hook?.unmount();
+  // });
 
   it('should fetch after first render', async () => {
     queryArgs = undefined;
+    form.resetFields();
+    changeSearchType('simple');
+
     act(() => {
-      hook = setUp({
-        asyncFn,
-        options: { form },
-      });
+      hook = setUp(asyncFn, {});
     });
-    await hook.waitForNextUpdate();
-    expect(hook.result.current.tableProps.loading).toEqual(false);
-    expect(hook.result.current.tableProps.pagination.current).toEqual(1);
-    expect(hook.result.current.tableProps.pagination.pageSize).toEqual(10);
-    expect(hook.result.current.tableProps.pagination.total).toEqual(20);
+
+    expect(hook.result.current.tableProps.loading).toBe(false);
+    expect(hook.result.current.tableProps.pagination.current).toBe(1);
+    expect(hook.result.current.tableProps.pagination.pageSize).toBe(10);
+    await waitFor(() => expect(hook.result.current.tableProps.pagination.total).toBe(20));
   });
-  it('should form, defaultPageSize, id work', async () => {
+
+  it('should defaultParams work', async () => {
     queryArgs = undefined;
+    form.resetFields();
+    changeSearchType('advance');
     act(() => {
-      hook = setUp({
-        asyncFn,
-        options: { form, defaultPageSize: 5, cacheKey: 'tableId' },
+      hook = setUp(asyncFn, {
+        form,
+        defaultParams: [
+          {
+            current: 2,
+            pageSize: 10,
+          },
+          { name: 'hello', phone: '123' },
+        ],
+        defaultType: 'advance',
       });
     });
-    await hook.waitForNextUpdate();
     const { search } = hook.result.current;
-    expect(hook.result.current.tableProps.loading).toEqual(false);
-    expect(queryArgs.current).toEqual(1);
-    expect(queryArgs.pageSize).toEqual(5);
-    expect(queryArgs.name).toEqual('default name');
-    expect(search).toBeDefined();
-    if (search) {
-      expect(search.type).toEqual('simple');
-    }
+    expect(hook.result.current.tableProps.loading).toBe(false);
+    await waitFor(() => expect(queryArgs.current).toBe(2));
+    expect(queryArgs.pageSize).toBe(10);
+    expect(queryArgs.name).toBe('hello');
+    expect(queryArgs.phone).toBe('123');
+    expect(search.type).toBe('advance');
+  });
+
+  it('should stop the query when validate fields failed', async () => {
+    queryArgs = undefined;
+    form.resetFields();
+    changeSearchType('advance');
+    act(() => {
+      hook = setUp(asyncFn, {
+        form: { ...form, validateFields: () => Promise.reject() },
+        defaultParams: [
+          {
+            current: 2,
+            pageSize: 10,
+          },
+          { name: 'hello', phone: '123' },
+        ],
+        defaultType: 'advance',
+      });
+    });
+
+    await sleep(1);
+    expect(queryArgs).toBeUndefined();
+  });
+
+  it('should ready work', async () => {
+    queryArgs = undefined;
+    form.resetFields();
+    changeSearchType('advance');
+
+    act(() => {
+      hook = setUp(asyncFn, {
+        ready: false,
+        form,
+        defaultParams: [
+          {
+            current: 2,
+            pageSize: 10,
+          },
+          { name: 'hello', phone: '123' },
+        ],
+        defaultType: 'advance',
+      });
+    });
+    await sleep(1);
+    expect(queryArgs).toBeUndefined();
+
+    hook.rerender({
+      ready: true,
+      form,
+      defaultParams: [
+        {
+          current: 2,
+          pageSize: 10,
+        },
+        { name: 'hello', phone: '456' },
+      ],
+      defaultType: 'advance',
+    });
+
+    const { search } = hook.result.current;
+    expect(hook.result.current.tableProps.loading).toBe(false);
+    await waitFor(() => expect(queryArgs.current).toBe(2));
+    expect(queryArgs.pageSize).toBe(10);
+    expect(queryArgs.name).toBe('hello');
+    expect(queryArgs.phone).toBe('456');
+    expect(search.type).toBe('advance');
+  });
+
+  it('should antd v3 work', async () => {
+    queryArgs = undefined;
+    form.resetFields();
+    changeSearchType('simple');
+
+    const v3Form = {
+      ...form,
+      getInternalHooks: undefined,
+      validateFields: function (fields, callback) {
+        const targetFileds = {};
+        fields.forEach((field) => {
+          targetFileds[field] = this.fieldsValue[field];
+        });
+        callback(undefined, targetFileds);
+      },
+      getFieldInstance(key: string) {
+        // 根据不同的 type 返回不同的 fieldsValues
+        if (searchType === 'simple') {
+          return ['name'].includes(key);
+        }
+        return ['name', 'email', 'phone'].includes(key);
+      },
+    };
+
+    act(() => {
+      hook = setUp(asyncFn, { form: v3Form });
+    });
+    const { search } = hook.result.current;
+    expect(hook.result.current.tableProps.loading).toBe(false);
+    await waitFor(() => expect(queryArgs.current).toBe(1));
+    expect(queryArgs.pageSize).toBe(10);
+    expect(queryArgs.name).toBe('default name');
+    expect(search.type).toBe('simple');
 
     // /* 切换 分页 */
     act(() => {
@@ -128,200 +219,132 @@ describe('useAntdTable', () => {
         pageSize: 5,
       });
     });
-    await hook.waitForNextUpdate();
-    expect(queryArgs.current).toEqual(2);
-    expect(queryArgs.pageSize).toEqual(5);
-    expect(queryArgs.name).toEqual('default name');
+    await waitFor(() => expect(queryArgs.current).toBe(2));
+    expect(queryArgs.pageSize).toBe(5);
+    expect(queryArgs.name).toBe('default name');
 
     /* 改变 name， 提交表单 */
-    form.fieldsValue.name = 'change name';
+    v3Form.fieldsValue.name = 'change name';
     act(() => {
-      if (search) {
-        search.submit();
-      }
+      search.submit();
     });
-    await hook.waitForNextUpdate();
-    expect(queryArgs.current).toEqual(1);
-    expect(queryArgs.pageSize).toEqual(5);
-    expect(queryArgs.name).toEqual('change name');
+    await waitFor(() => expect(queryArgs.current).toBe(1));
+    expect(queryArgs.current).toBe(1);
+    // expect(queryArgs.pageSize).toBe(5);
+    expect(queryArgs.name).toBe('change name');
+  });
 
-    // /* 切换 searchType 到 advance */
+  it('should reset pageSize in defaultParams', async () => {
+    queryArgs = undefined;
+    form.resetFields();
     act(() => {
-      if (search) {
-        search.changeType();
-        changeSearchType('advance');
-      }
-    });
-    if (hook.result.current.search) {
-      expect(hook.result.current.search.type).toEqual('advance');
-    }
-    act(() => {
-      if (hook.result.current.search) {
-        hook.result.current.search.submit();
-      }
-    });
-    await hook.waitForNextUpdate();
-
-    expect(queryArgs.current).toEqual(1);
-    expect(queryArgs.name).toEqual('change name');
-
-    // /* 手动改变其他两个字段的值 */
-    form.fieldsValue.phone = '13344556677';
-    form.fieldsValue.email = 'x@qq.com';
-
-    act(() => {
-      if (hook.result.current.search) {
-        hook.result.current.search.submit();
-      }
-    });
-    await hook.waitForNextUpdate();
-    expect(queryArgs.current).toEqual(1);
-    expect(queryArgs.name).toEqual('change name');
-    expect(queryArgs.phone).toEqual('13344556677');
-    expect(queryArgs.email).toEqual('x@qq.com');
-
-    // /* 改变 name，但是不提交，切换到 simple 去 */
-    form.fieldsValue.name = 'change name 2';
-    act(() => {
-      if (hook.result.current.search) {
-        hook.result.current.search.changeType();
-        changeSearchType('simple');
-      }
+      hook = setUp(asyncFn, {
+        form,
+        defaultParams: [
+          {
+            current: 1,
+            pageSize: 10,
+          },
+        ],
+      });
     });
 
-    if (hook.result.current.search) {
-      expect(hook.result.current.search.type).toEqual('simple');
-    }
-    expect(form.fieldsValue.name).toEqual('change name 2');
+    const { search, tableProps } = hook.result.current;
+    expect(tableProps.loading).toBe(false);
+    await waitFor(() => expect(queryArgs.current).toBe(1));
+    expect(queryArgs.pageSize).toBe(10);
 
-    // /* 提交 */
+    // change params
     act(() => {
-      if (hook.result.current.search) {
-        hook.result.current.search.submit();
-      }
-    });
-    await hook.waitForNextUpdate();
-
-    expect(queryArgs.name).toEqual('change name 2');
-    expect(queryArgs.phone).toBeUndefined();
-    expect(queryArgs.email).toBeUndefined();
-
-    // /* 切换回 advance，恢复之前的条件 */
-    act(() => {
-      if (hook.result.current.search) {
-        hook.result.current.search.changeType();
-      }
-      changeSearchType('advance');
-    });
-
-    if (hook.result.current.search) {
-      expect(hook.result.current.search.type).toEqual('advance');
-    }
-    expect(form.fieldsValue.name).toEqual('change name 2');
-    expect(form.fieldsValue.phone).toEqual('13344556677');
-    expect(form.fieldsValue.email).toEqual('x@qq.com');
-
-    act(() => {
-      hook.result.current.tableProps.onChange({
-        current: 3,
+      tableProps.onChange({
+        current: 2,
         pageSize: 5,
       });
     });
-    await hook.waitForNextUpdate();
-    // /* 卸载重装 */
-    form.fieldsValue = {
-      name: '',
-      phone: '',
-      email: '',
-    };
-    act(() => {
-      hook.unmount();
-    });
-    act(() => {
-      hook = setUp({
-        asyncFn,
-        options: { form, defaultPageSize: 5, cacheKey: 'tableId' },
-      });
-    });
-    await hook.waitForNextUpdate();
-    if (hook.result.current.search) {
-      expect(hook.result.current.search.type).toEqual('simple');
-    }
-    expect(hook.result.current.tableProps.pagination.current).toEqual(3);
-    expect(form.fieldsValue.name).toEqual('change name 2');
-    expect(form.fieldsValue.phone).toEqual('13344556677');
-    expect(form.fieldsValue.email).toEqual('x@qq.com');
 
-    /* refresh */
-    act(() => {
-      hook.result.current.refresh();
-    });
-    expect(hook.result.current.tableProps.loading).toEqual(true);
-    await hook.waitForNextUpdate();
-    /* reset */
-    act(() => {
-      if (hook.result.current.search) {
-        hook.result.current.search.reset();
-      }
+    await waitFor(() => {
+      expect(queryArgs.current).toBe(2);
+      expect(queryArgs.pageSize).toBe(5);
     });
 
-    expect(form.fieldsValue.name).toEqual('default name');
-    expect(form.fieldsValue.phone).toBeUndefined();
-    expect(form.fieldsValue.email).toBeUndefined();
+    // reset params
+    act(() => {
+      search.reset();
+    });
+
+    await waitFor(() => {
+      expect(queryArgs.current).toBe(1);
+      expect(queryArgs.pageSize).toBe(10);
+    });
   });
 
-  it('should defaultParams work', async () => {
+  it('should reset pageSize in defaultPageSize', async () => {
     queryArgs = undefined;
+    form.resetFields();
     act(() => {
-      hook = setUp({
-        asyncFn,
-        options: {
-          form,
-          defaultParams: [
-            {
-              current: 2,
-              pageSize: 10,
-            },
-            { name: 'hello', phone: '123' },
-          ],
-          defaultType: 'advance',
+      hook = setUp(asyncFn, {
+        form,
+        defaultParams: {
+          current: 1,
+          pageSize: 10,
         },
+        defaultPageSize: 20,
       });
     });
-    await hook.waitForNextUpdate();
+
+    const { search, tableProps } = hook.result.current;
+    expect(tableProps.loading).toBe(false);
+    await waitFor(() => expect(queryArgs.current).toBe(1));
+    expect(queryArgs.pageSize).toBe(20);
+
+    // change params
+    act(() => {
+      tableProps.onChange({
+        current: 2,
+        pageSize: 5,
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryArgs.current).toBe(2);
+      expect(queryArgs.pageSize).toBe(5);
+    });
+
+    // reset params
+    act(() => {
+      search.reset();
+    });
+
+    await waitFor(() => {
+      expect(queryArgs.current).toBe(1);
+      expect(queryArgs.pageSize).toBe(20);
+    });
+  });
+
+  it('search submit use default params', async () => {
+    queryArgs = undefined;
+    form.resetFields();
+    act(() => {
+      hook = setUp(asyncFn, {
+        form,
+        defaultParams: [
+          {
+            current: 2,
+            pageSize: 100,
+          },
+        ],
+      });
+    });
+
     const { search } = hook.result.current;
-    expect(hook.result.current.tableProps.loading).toEqual(false);
-    expect(queryArgs.current).toEqual(2);
-    expect(queryArgs.pageSize).toEqual(10);
-    expect(queryArgs.name).toEqual('hello');
-    expect(queryArgs.phone).toEqual('123');
-    expect(search).toBeDefined();
-    if (search) {
-      expect(search.type).toEqual('advance');
-    }
-  });
 
-  it('should stop the query when validate fields failed', async () => {
-    queryArgs = undefined;
-    changeSearchType('advance');
     act(() => {
-      hook = setUp({
-        asyncFn,
-        options: {
-          form: { ...form, validateFields: () => Promise.reject(false) },
-          defaultParams: [
-            {
-              current: 2,
-              pageSize: 10,
-            },
-            { name: 'hello', phone: '123' },
-          ],
-          defaultType: 'advance',
-        },
-      });
+      search.submit();
     });
 
-    await sleep(1);
-    expect(queryArgs).toEqual(undefined);
+    await waitFor(() => {
+      expect(queryArgs.current).toBe(2);
+      expect(queryArgs.pageSize).toBe(100);
+    });
   });
 });
